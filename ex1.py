@@ -4,6 +4,9 @@ import math
 import itertools
 
 
+# When returning state it needs to be hashable
+
+
 ids = ["111111111", "111111111"]
 
 PASSABLE = 'P'
@@ -32,7 +35,7 @@ def can_move(state, action):
     for t in state["taxis"]:
         # Checking that there are no other taxis in the tile to be moved to
         if t != taxi:
-            if state["taxis"][t]["location"] == taxi_location:
+            if state["taxis"][t]["location"] == move_to:
                 return False
     return True
 
@@ -50,6 +53,10 @@ def can_pickup(state, action):
 
     # There is space in the taxi
     if len(state["taxis"][taxi]["on_board"]) >= capacity:
+        return False
+
+    # Passenger has not been picked up
+    if state["passenger"][passenger]["picked up"]:
         return False
 
     return True
@@ -74,10 +81,11 @@ def can_refuel(state, action):
 
     if taxi_location != GAS_STATION:
         return False
-    # TODO
+    # TODO check later whether it's needed
     if max_fuel == fuel:
         return False
     return True
+
 
 def local_area(state, taxi):
     matrix = state["map"]
@@ -110,7 +118,8 @@ class TaxiProblem(search.Problem):
         for taxi in initial["taxis"]:
             initial["taxis"][taxi]['on_board'] = []
             initial["taxis"][taxi]["max_fuel"] = initial["taxis"][taxi]["fuel"]
-        for passenger in
+        for passenger in initial["passengers"]:
+            initial["passengers"][passenger]["picked up"] = False
         self.state = initial
         # TODO
         search.Problem.__init__(self, initial)
@@ -142,9 +151,9 @@ class TaxiProblem(search.Problem):
                     actions.append(("drop off", taxi, passenger))
                     wait_flag = False
 
-                if can_refuel(self.state, ("refuel", taxi)):
-                    actions.append(("refuel", taxi))
-                    wait_flag = False
+            if can_refuel(self.state, ("refuel", taxi)):
+                actions.append(("refuel", taxi))
+                wait_flag = False
             if wait_flag:
                 actions.append(("wait", taxi))
 
@@ -162,10 +171,24 @@ class TaxiProblem(search.Problem):
         elif act == "pick up":
             passenger = act[2]
             state["taxis"][taxi]["on_board"].append(passenger)
+            state["passengers"][passenger]["picked up"] = True
+        elif act == "drop off":
+            passenger = act[2]
+            state["passengers"][passenger]["location"] = state["passengers"][passenger]["destination"]
+            state["taxis"][taxi]["on_board"].remove(passenger)
+            # Keep the picked up attribute True so that other taxis don't pick them up
+        elif act == "refuel":
+            state["taxis"][taxi]["fuel"] = state["taxis"][taxi]["max_fuel"]
+
+        return state
 
     def goal_test(self, state):
         """ Given a state, checks if this is the goal state.
-         Returns True if it is, False otherwise."""
+             Returns True if it is, False otherwise."""
+        for passenger in state["passengers"]:
+            if state["passengers"][passenger]["location"] != state["passengers"][passenger]["destination"]:
+                return False
+        return True
 
     def h(self, node):
         """ This is the heuristic. It gets a node (not a state,
