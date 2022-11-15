@@ -40,7 +40,6 @@ def dict_to_tuples(state):
     return tuple(res)
 
 
-
 t = dict_to_tuples(state)
 
 
