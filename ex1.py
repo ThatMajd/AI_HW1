@@ -112,7 +112,7 @@ def can_pickup(state, action):
         return False
 
     # Passenger has not been picked up
-    if state["passenger"][passenger]["picked up"]:
+    if state["passengers"][passenger]["picked up"]:
         return False
 
     return True
@@ -179,8 +179,8 @@ class TaxiProblem(search.Problem):
             initial["taxis"][taxi]["max_fuel"] = initial["taxis"][taxi]["fuel"]
         for passenger in initial["passengers"]:
             initial["passengers"][passenger]["picked up"] = False
+
         self.state = dict_to_tuples(initial)
-        # TODO
         search.Problem.__init__(self, self.state)
 
     def actions(self, state):
@@ -188,7 +188,6 @@ class TaxiProblem(search.Problem):
         state. The result should be a tuple (or other iterable) of actions
         as defined in the problem description file"""
         if state != dict:
-            
             state = tuple_to_dict(state)
         taxis = state["taxis"]
         passengers = state["passengers"]
@@ -225,9 +224,11 @@ class TaxiProblem(search.Problem):
         action in the given state. The action must be one of
         self.actions(state)."""
         if state != dict:
-            
             state = tuple_to_dict(state)
-        act = action[0]
+        # print(state)
+        # print(action)
+
+        act = action[0]f
         taxi = action[1]
         if act == "move":
             # update taxis and passengers on the taxi's location
@@ -238,7 +239,7 @@ class TaxiProblem(search.Problem):
             passenger = action[2]
             state["taxis"][taxi]["on_board"].append(passenger)
             state["passengers"][passenger]["picked up"] = True
-            print(state)
+            #print(state)
         elif act == "drop off":
             passenger = action[2]
             # TODO check later
@@ -250,6 +251,8 @@ class TaxiProblem(search.Problem):
         elif act == "refuel":
             state["taxis"][taxi]["fuel"] = state["taxis"][taxi]["max_fuel"]
 
+        print(state)
+        print("")
         self.state = dict_to_tuples(state)
         return self.state
 
@@ -267,20 +270,20 @@ class TaxiProblem(search.Problem):
         """ This is the heuristic. It gets a node (not a state,
         state can be accessed via node.state)
         and returns a goal distance estimate"""
-        return 0
+        return self.h_1(node) + self.h_2(node)
 
     def h_1(self, node):
         """
         This is a simple heuristic
         """
-        state = node.state
+        state = state = tuple_to_dict(node.state)
         unpicked = 0
         picked_not_delivered = 0
         for passenger in state["passengers"]:
             if not state["passengers"][passenger]["picked up"]:
                 unpicked += 1
             else:
-                if state["passenger"]["location"] != state["passenger"]["destination"]:
+                if state["passengers"][passenger]["location"] != state["passengers"][passenger]["destination"]:
                     picked_not_delivered += 1
         num_taxis = len(state["taxis"])
 
@@ -291,7 +294,7 @@ class TaxiProblem(search.Problem):
         This is a slightly more sophisticated Manhattan heuristic
         """
         # TODO check correctness
-        state = node.state
+        state = tuple_to_dict(node.state)
         d, t = 0, 0
         for passenger in state["passengers"]:
             if not state["passengers"][passenger]["picked up"]:
