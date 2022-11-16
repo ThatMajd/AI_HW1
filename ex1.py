@@ -13,6 +13,62 @@ PASSABLE = 'P'
 IMPASSABLE = 'I'
 GAS_STATION = 'G'
 
+def dict_to_tuples(state):
+    res = []
+    # matrix
+    if type(state) == list and state and type(state[0]) == list:
+        r = []
+        for l in state:
+            r.append(tuple(l))
+        return tuple(r)
+    # reached the base case i.e. literal
+
+    if type(state) != dict:
+        if type(state) == list:
+            return tuple(state)
+        return state
+
+    for key in sorted(list(state.keys())):
+        res.append((key, dict_to_tuples(state[key])))
+    return tuple(res)
+
+
+def tuple_to_dict(state):
+    a = {}
+    p = {}
+    taxis = {}
+
+    a[state[0][0]] = state[0][1]
+    a[state[1][0]] = p
+    pasgs = state[1][1]
+    for t in pasgs:
+        p[t[0]] = {t[1][0][0]: t[1][0][1],
+                   t[1][1][0]: t[1][1][1],
+                   t[1][2][0]: t[1][2][1]}
+    a[state[2][0]] = taxis # {taxis : {}}
+    for t in state[2][1]:
+
+        taxis[t[0]] = {t[1][0][0]: t[1][0][1],
+                       t[1][1][0]: t[1][1][1],
+                       t[1][2][0]: t[1][2][1],
+                       t[1][3][0]: t[1][3][1],
+                       t[1][4][0]: list(t[1][4][1])}
+    return a
+
+
+
+def man_dist(x, y):
+    return sum(abs(i-j) for i, j in zip(x, y))
+
+def update_location(state, loc, passengers):
+    """
+    function takes the state, new location to be updated, and a list of the passengers
+    that will be updated.
+    we assume that the passengers are on the taxi going to the loc.
+    i.e assuming everything is legal
+    """
+    for passenger in passengers:
+        state["passengers"][passenger]["location"] = loc
 
 def can_move(state, action):
     # Check fuel level
@@ -43,7 +99,7 @@ def can_move(state, action):
 def can_pickup(state, action):
     taxi = action[1]
     passenger = action[2]
-    passenger_location = state["passenger"][passenger]["location"]
+    passenger_location = state["passengers"][passenger]["location"]
     taxi_location = state["taxis"][taxi]["location"]
     capacity = state["taxis"][taxi]["capacity"]
 
@@ -65,8 +121,11 @@ def can_pickup(state, action):
 def can_dropoff(state, action):
     taxi = action[1]
     passenger = action[2]
-    passenger_dist = state["passenger"][passenger]["destination"]
+    passenger_dist = state["passengers"][passenger]["destination"]
     taxi_location = state["taxis"][taxi]["location"]
+
+    if passenger not in state["taxis"][taxi]["on_board"]:
+        return False
 
     if passenger_dist != taxi_location:
         return False
@@ -120,14 +179,17 @@ class TaxiProblem(search.Problem):
             initial["taxis"][taxi]["max_fuel"] = initial["taxis"][taxi]["fuel"]
         for passenger in initial["passengers"]:
             initial["passengers"][passenger]["picked up"] = False
-        self.state = initial
+        self.state = dict_to_tuples(initial)
         # TODO
-        search.Problem.__init__(self, initial)
+        search.Problem.__init__(self, self.state)
 
     def actions(self, state):
         """Returns all the actions that can be executed in the given
         state. The result should be a tuple (or other iterable) of actions
         as defined in the problem description file"""
+        if state != dict:
+            
+            state = tuple_to_dict(state)
         taxis = state["taxis"]
         passengers = state["passengers"]
         acts1 = ["move", "pick up", "drop off"]
@@ -137,21 +199,20 @@ class TaxiProblem(search.Problem):
 
         for taxi in taxis:
             wait_flag = True
-            for passenger, pos in zip(passengers, local_area(self.state, taxi)):
-                # TODO passenger is incorrect we need to give it a point
-                if can_move(self.state, ("move", taxi, pos)):
+            for passenger, pos in zip(passengers, local_area(state, taxi)):
+                if can_move(state, ("move", taxi, pos)):
                     actions.append(("move", taxi, pos))
                     wait_flag = False
 
-                if can_pickup(self.state, ("pick up", taxi, passenger)):
+                if can_pickup(state, ("pick up", taxi, passenger)):
                     actions.append(("pick up", taxi, passenger))
                     wait_flag = False
 
-                if can_dropoff(self.state, ("drop off", taxi, passenger)):
+                if can_dropoff(state, ("drop off", taxi, passenger)):
                     actions.append(("drop off", taxi, passenger))
                     wait_flag = False
 
-            if can_refuel(self.state, ("refuel", taxi)):
+            if can_refuel(state, ("refuel", taxi)):
                 actions.append(("refuel", taxi))
                 wait_flag = False
             if wait_flag:
@@ -163,28 +224,40 @@ class TaxiProblem(search.Problem):
         """Return the state that results from executing the given
         action in the given state. The action must be one of
         self.actions(state)."""
+        if state != dict:
+            
+            state = tuple_to_dict(state)
         act = action[0]
         taxi = action[1]
         if act == "move":
-            state["taxis"][taxi]["location"] = act[2]
+            # update taxis and passengers on the taxi's location
+            state["taxis"][taxi]["location"] = action[2]
             state["taxis"][taxi]["fuel"] -= 1
+            update_location(state, action[2], state["taxis"][taxi]["on_board"])
         elif act == "pick up":
-            passenger = act[2]
+            passenger = action[2]
             state["taxis"][taxi]["on_board"].append(passenger)
             state["passengers"][passenger]["picked up"] = True
+            print(state)
         elif act == "drop off":
-            passenger = act[2]
+            passenger = action[2]
+            # TODO check later
             state["passengers"][passenger]["location"] = state["passengers"][passenger]["destination"]
+            #print(state["taxis"][taxi]["on_board"])
+            #print(passenger)
             state["taxis"][taxi]["on_board"].remove(passenger)
             # Keep the picked up attribute True so that other taxis don't pick them up
         elif act == "refuel":
             state["taxis"][taxi]["fuel"] = state["taxis"][taxi]["max_fuel"]
 
-        return state
+        self.state = dict_to_tuples(state)
+        return self.state
 
     def goal_test(self, state):
         """ Given a state, checks if this is the goal state.
              Returns True if it is, False otherwise."""
+        if state != dict:
+            state = tuple_to_dict(state)
         for passenger in state["passengers"]:
             if state["passengers"][passenger]["location"] != state["passengers"][passenger]["destination"]:
                 return False
@@ -217,6 +290,15 @@ class TaxiProblem(search.Problem):
         """
         This is a slightly more sophisticated Manhattan heuristic
         """
+        # TODO check correctness
+        state = node.state
+        d, t = 0, 0
+        for passenger in state["passengers"]:
+            if not state["passengers"][passenger]["picked up"]:
+                d += man_dist(state["passengers"][passenger]["location"], state["passengers"][passenger]["destination"])
+            else:
+                t += man_dist(state["passengers"][passenger]["location"], state["passengers"][passenger]["destination"])
+        return (d + t) / len(state["taxis"])
 
     """Feel free to add your own functions
     (-2, -2, None) means there was a timeout"""

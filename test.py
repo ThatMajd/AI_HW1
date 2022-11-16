@@ -1,3 +1,4 @@
+from ex1 import *
 
 state = {
             "map": [['P', 'P', 'P', 'P'],
@@ -8,7 +9,7 @@ state = {
                                  "fuel": 15,
                                  "max_fuel": 15,
                                  "capacity": 2,
-                                 "on_board": []},
+                                 "on_board": ['Yossi', 'Moshe']},
                       'taxi 2': {"location": (3, 3),
                                  "fuel": 15,
                                  "max_fuel": 15,
@@ -28,20 +29,24 @@ state = {
 
 def dict_to_tuples(state):
     res = []
+    # matrix
     if type(state) == list and state and type(state[0]) == list:
         r = []
         for l in state:
             r.append(tuple(l))
         return tuple(r)
+    # reached the base case i.e. literal
+
     if type(state) != dict:
+        if type(state) == list:
+            return tuple(state)
         return state
+
     for key in sorted(list(state.keys())):
         res.append((key, dict_to_tuples(state[key])))
     return tuple(res)
 
-
 t = dict_to_tuples(state)
-
 
 def tuple_to_dict(state):
     a = {}
@@ -57,11 +62,17 @@ def tuple_to_dict(state):
                    t[1][2][0]: t[1][2][1]}
     a[state[2][0]] = taxis # {taxis : {}}
     for t in state[2][1]:
+
         taxis[t[0]] = {t[1][0][0]: t[1][0][1],
                        t[1][1][0]: t[1][1][1],
                        t[1][2][0]: t[1][2][1],
                        t[1][3][0]: t[1][3][1],
-                       t[1][4][0]: t[1][4][1]}
+                       t[1][4][0]: list(t[1][4][1])}
     return a
 
-tuple_to_dict(t)
+print(tuple_to_dict(t))
+
+
+
+def man_dist(x, y):
+    return sum(abs(i-j) for i, j in zip(x, y))
