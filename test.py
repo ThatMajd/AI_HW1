@@ -64,3 +64,4 @@ def tuple_to_dict(state):
                        t[1][4][0]: t[1][4][1]}
     return a
 
+tuple_to_dict(t)

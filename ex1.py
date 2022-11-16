@@ -200,6 +200,18 @@ class TaxiProblem(search.Problem):
         """
         This is a simple heuristic
         """
+        state = node.state
+        unpicked = 0
+        picked_not_delivered = 0
+        for passenger in state["passengers"]:
+            if not state["passengers"][passenger]["picked up"]:
+                unpicked += 1
+            else:
+                if state["passenger"]["location"] != state["passenger"]["destination"]:
+                    picked_not_delivered += 1
+        num_taxis = len(state["taxis"])
+
+        return (2*unpicked + picked_not_delivered) / num_taxis
 
     def h_2(self, node):
         """
