@@ -73,6 +73,41 @@ def tuple_to_dict(state):
 print(tuple_to_dict(t))
 
 
+def actions(state):
+    """Returns all the actions that can be executed in the given
+    state. The result should be a tuple (or other iterable) of actions
+    as defined in the problem description file"""
+    if state != dict:
+        state = tuple_to_dict(state)
+    taxis = state["taxis"]
+    passengers = state["passengers"]
 
-def man_dist(x, y):
-    return sum(abs(i-j) for i, j in zip(x, y))
+
+    actions = []
+
+    for taxi in taxis:
+        wait_flag = True
+        for passenger, pos in zip(passengers, local_area(state, taxi)):
+            if can_move(state, ("move", taxi, pos)):
+                actions.append(("move", taxi, pos))
+                wait_flag = False
+
+            if can_pickup(state, ("pick up", taxi, passenger)):
+                actions.append(("pick up", taxi, passenger))
+                wait_flag = False
+
+            if can_dropoff(state, ("drop off", taxi, passenger)):
+                actions.append(("drop off", taxi, passenger))
+                wait_flag = False
+
+        if can_refuel(state, ("refuel", taxi)):
+            actions.append(("refuel", taxi))
+            wait_flag = False
+        if wait_flag:
+            actions.append(("wait", taxi))
+
+    print(actions)
+    return actions
+
+actions(state)
+
