@@ -6,12 +6,17 @@ import itertools
 
 # When returning state it needs to be hashable
 
+# TODO
+# - Use string as a hashable object, i.e. turn the dict into a literal string and then use the library ast
+#   which is def more optimized than your code
+
 
 ids = ["111111111", "111111111"]
 
 PASSABLE = 'P'
 IMPASSABLE = 'I'
 GAS_STATION = 'G'
+
 
 def dict_to_tuples(state):
     res = []
@@ -80,12 +85,8 @@ def can_move(state, action):
     taxi_location = state["taxis"][taxi]["location"]
     move_to = action[2]
 
-
     if fuel <= 0:
         return False
-    # if abs(taxi_location[0] - move_to[0]) + abs(taxi_location[1] - move_to[1]) != 1:
-    #     # Move isn't legal
-    #     return False
 
     if matrix[move_to[0]][move_to[1]] == IMPASSABLE:
         return False
@@ -114,6 +115,9 @@ def can_pickup(state, action):
         return False
 
     # Passenger has not been picked up
+    # there will be a taxi where every passenger is thus this condition is redundant
+
+    # Deleting this condition worsens runtime for some reason
     if state["passengers"][passenger]["picked up"]:
         return False
     return True
@@ -167,6 +171,7 @@ def local_area(state, taxi):
 
 class TaxiProblem(search.Problem):
     """This class implements a medical problem according to problem description file"""
+    matrix = 0
 
     def __init__(self, initial):
         """Don't forget to implement the goal test
@@ -181,6 +186,8 @@ class TaxiProblem(search.Problem):
         for passenger in initial["passengers"]:
             initial["passengers"][passenger]["picked up"] = False
 
+        self.matrix = initial["map"]
+        #del initial["map"]
         self.state = dict_to_tuples(initial)
         search.Problem.__init__(self, self.state)
 
@@ -200,20 +207,18 @@ class TaxiProblem(search.Problem):
         for taxi in taxis:
             for pos in local_area(state, taxi):
                 if can_move(state, ("move", taxi, pos)):
-                    actions.append(("move", taxi, pos))
+                    yield(("move", taxi, pos))
 
             for passenger in passengers:
                 if can_pickup(state, ("pick up", taxi, passenger)):
-                    actions.append(("pick up", taxi, passenger))
+                    yield(("pick up", taxi, passenger))
 
                 if can_dropoff(state, ("drop off", taxi, passenger)):
-                    actions.append(("drop off", taxi, passenger))
+                    yield(("drop off", taxi, passenger))
 
             if can_refuel(state, ("refuel", taxi)):
-                actions.append(("refuel", taxi))
-            actions.append(("wait", taxi))
-
-        return actions
+                yield(("refuel", taxi))
+            yield(("wait", taxi))
 
     def result(self, state, action):
         """Return the state that results from executing the given
@@ -221,7 +226,6 @@ class TaxiProblem(search.Problem):
         self.actions(state)."""
         if state != dict:
             state = tuple_to_dict(state)
-
 
         act = action[0]
         taxi = action[1]
@@ -234,18 +238,14 @@ class TaxiProblem(search.Problem):
             passenger = action[2]
             state["taxis"][taxi]["on_board"].append(passenger)
             state["passengers"][passenger]["picked up"] = True
-            #print(state)
         elif act == "drop off":
             passenger = action[2]
             # TODO check later
             state["passengers"][passenger]["location"] = state["passengers"][passenger]["destination"]
-            #print(state["taxis"][taxi]["on_board"])
-            #print(passenger)
             state["taxis"][taxi]["on_board"].remove(passenger)
             # Keep the picked up attribute True so that other taxis don't pick them up
         elif act == "refuel":
             state["taxis"][taxi]["fuel"] = state["taxis"][taxi]["max_fuel"]
-
 
         self.state = dict_to_tuples(state)
         return self.state
@@ -268,7 +268,7 @@ class TaxiProblem(search.Problem):
         """ This is the heuristic. It gets a node (not a state,
         state can be accessed via node.state)
         and returns a goal distance estimate"""
-        return 0
+        return self.h_1(node) + self.h_2(node)
 
     def h_1(self, node):
         """
@@ -310,186 +310,3 @@ def create_taxi_problem(game):
 
 
 
-#
-# import search
-# import random
-# import math
-# from copy import deepcopy
-# import ast
-# import itertools
-#
-# ids = ["209028869", "206016446"]
-#
-#
-# class TaxiProblem(search.Problem):
-#     """This class implements a medical problem according to problem description file"""
-#     map = []
-#
-#     const_taxis = {}
-#     const_passengers = {}
-#
-#     state = ""
-#
-#     num_taxis = 0
-#     num_passengers = 0
-#
-#     def __init__(self, initial):
-#         """Don't forget to implement the goal test
-#         You should change the initial to your own representation.
-#         search.Problem.__init__(self, initial) creates the root node"""
-#         self.map = initial['map']
-#
-#         self.const_taxis = initial["taxis"]
-#         self.const_passengers = initial["passengers"]
-#
-#         self_state = deepcopy(initial)
-#         self_state.pop("map")
-#
-#         for taxi in self_state["taxis"].keys():
-#             self_state["taxis"][taxi]["capacity"] = 0
-#             self_state["taxis"][taxi]["passengers_names"] = []
-#
-#         for name in self_state["passengers"].keys():
-#             self_state["passengers"][name].pop("destination")
-#             self_state["passengers"][name]["taxi"] = "none"
-#
-#         self.state = str(self_state)
-#
-#         self.num_taxis = len(self.const_taxis.keys())
-#         self.num_passengers = len(self.const_passengers.keys())
-#
-#         search.Problem.__init__(self, self.state)
-#
-#     def actions(self, state):
-#         """Returns all the actions that can be executed in the given
-#         state. The result should be a tuple (or other iterable) of actions
-#         as defined in the problem description file"""
-#         self_state = ast.literal_eval(self.state)
-#         state = ast.literal_eval(state)
-#         actions_taxi = {}
-#         taxis = self_state["taxis"].keys()
-#         passengers = self_state["passengers"].keys()
-#         for taxi in taxis:
-#             taxi_loc = state["taxis"][taxi]["location"]
-#             current_actions = []
-#             if state["taxis"][taxi]["fuel"] > 0:
-#                 current_actions.append((("move", taxi, (taxi_loc[0] + 1, taxi_loc[1])), (taxi_loc[0] + 1, taxi_loc[1])))
-#                 current_actions.append((("move", taxi, (taxi_loc[0], taxi_loc[1] + 1)), (taxi_loc[0], taxi_loc[1] + 1)))
-#                 current_actions.append((("move", taxi, (taxi_loc[0], taxi_loc[1] - 1)), (taxi_loc[0], taxi_loc[1] - 1)))
-#                 current_actions.append((("move", taxi, (taxi_loc[0] - 1, taxi_loc[1])), (taxi_loc[0] - 1, taxi_loc[1])))
-#
-#             list_to_remove = []
-#             for act in current_actions:
-#                 if act[0][2][0] < 0 or act[0][2][1] < 0 or act[0][2][0] > len(self.map) - 1 or act[0][2][1] > \
-#                         len(self.map[0]) - 1 or self.map[act[0][2][0]][act[0][2][1]] == "I":
-#                     list_to_remove.append(act)
-#
-#             for act in list_to_remove:
-#                 current_actions.remove(act)
-#
-#             actions_taxi[taxi] = current_actions
-#
-#             for name in passengers:
-#                 if state["passengers"][name]["location"] == taxi_loc and state["passengers"][name]["taxi"] != taxi:
-#                     actions_taxi[taxi].append((("pick up", taxi, name), taxi_loc))
-#
-#             for name_in_taxi in state["taxis"][taxi]["passengers_names"]:
-#                 if state["passengers"][name_in_taxi]["location"] == self.const_passengers[name_in_taxi]["destination"]:
-#                     actions_taxi[taxi].append((("drop off", taxi, name_in_taxi), taxi_loc))
-#
-#             if "G" == self.map[taxi_loc[0]][taxi_loc[1]]:
-#                 actions_taxi[taxi].append((("refuel", taxi), taxi_loc))
-#
-#             actions_taxi[taxi].append((("wait", taxi), taxi_loc))  # ("move", "taci_2", (2,1))
-#
-#         actions = list(itertools.product(*actions_taxi.values()))
-#         possible_actions = []
-#         for act in actions:
-#             loc_in_act = set([loc[1] for loc in act])
-#             if len(loc_in_act) == self.num_taxis:
-#                 possible_actions.append(tuple([loc[0] for loc in act]))
-#         print(possible_actions)
-#         return tuple(possible_actions)
-#
-#     def result(self, state, action):
-#         """Return the state that results from executing the given
-#         action in the given state. The action must be one of
-#         self.actions(state)."""
-#         state = ast.literal_eval(state)
-#         new_state = deepcopy(state)
-#         if action == ():
-#             new_state = (-2, -2, None)
-#
-#         for act in action:
-#             if act[0] == "move":
-#                 new_state["taxis"][act[1]]["location"] = act[2]
-#                 new_state["taxis"][act[1]]["fuel"] -= 1
-#                 for name in state["taxis"][act[1]]["passengers_names"]:
-#                     new_state["passengers"][name]["location"] = act[2]
-#
-#             if act[0] == "pick up":
-#                 new_state["taxis"][act[1]]["capacity"] += 1
-#                 new_state["taxis"][act[1]]["passengers_names"].append(act[2])
-#                 new_state["passengers"][act[2]]["taxi"] = act[1]
-#
-#             if act[0] == "drop off":
-#                 new_state["taxis"][act[1]]["capacity"] -= 1
-#                 new_state["taxis"][act[1]]["passengers_names"].remove(act[2])
-#                 new_state["passengers"][act[2]]["taxi"] = "none"
-#
-#             if act[0] == "refuel":
-#                 new_state["taxis"][act[1]]["fuel"] = self.const_taxis[act[1]]["fuel"]
-#
-#         return str(new_state)
-#
-#     def goal_test(self, state):
-#         """ Given a state, checks if this is the goal state.
-#          Returns True if it is, False otherwise."""
-#
-#         state = ast.literal_eval(state)
-#         for name in state["passengers"].keys():
-#             if state["passengers"][name]["location"] != self.const_passengers[name]["destination"] or \
-#                     state["passengers"][name]["taxi"] != "none":
-#                 return False
-#         return True
-#
-#     def h(self, node):
-#         """ This is the heuristic. It gets a node (not a state,
-#         state can be accessed via node.state)
-#         and returns a goal distance estimate"""
-#         return 0
-#
-#     def h_1(self, node):
-#         """
-#         This is a simple heuristic
-#         """
-#         node_state = ast.literal_eval(node.state)
-#         heuristic_estimiation = 0
-#         for name in node_state["passengers"].keys():
-#             if node_state["passengers"][name]["taxi"] == "none":
-#                 heuristic_estimiation += 2
-#             else:
-#                 heuristic_estimiation += 1
-#
-#         return heuristic_estimiation / self.num_taxis
-#
-#     def h_2(self, node):
-#         """
-#         This is a slightly more sophisticated Manhattan heuristic
-#         """
-#         node_state = ast.literal_eval(node.state)
-#         DT = 0
-#         for name in node_state["passengers"].keys():
-#             DT += math.abs(
-#                 node_state["passengers"][name]["location"][0] - self.const_passengers[name]["destination"][0])
-#             DT += math.abs(
-#                 node_state["passengers"][name]["location"][1] - self.const_passengers[name]["destination"][1])
-#
-#         return DT / self.num_taxis
-#
-#     """Feel free to add your own functions
-#     (-2, -2, None) means there was a timeout"""
-#
-#
-# def create_taxi_problem(game):
-#     return TaxiProblem(game)
