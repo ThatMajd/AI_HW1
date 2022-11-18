@@ -187,7 +187,7 @@ class TaxiProblem(search.Problem):
             initial["passengers"][passenger]["picked up"] = False
 
         self.matrix = initial["map"]
-        #del initial["map"]
+        ##del initial["map"]
         self.state = dict_to_tuples(initial)
         search.Problem.__init__(self, self.state)
 
