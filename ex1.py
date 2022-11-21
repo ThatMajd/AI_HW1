@@ -56,6 +56,10 @@ def man_dist(x, y):
     return sum(abs(i-j) for i, j in zip(x, y))
 
 
+def euc_dist(x, y):
+    return math.sqrt(sum((i-j) ** 2 for i, j in zip(x, y)))
+
+
 def update_location(state, loc, passengers):
     """
     function takes the state, new location to be updated, and a list of the passengers
@@ -304,7 +308,6 @@ class TaxiProblem(search.Problem):
 
         # tups = list(itertools.product(*actions.values()))
         for action in itertools.product(*actions.values()):
-
             if not can_crash(action):
                 yield tuple(a[0] for a in action)
 
@@ -340,17 +343,6 @@ class TaxiProblem(search.Problem):
                 cur_state["taxis"][taxi]["fuel"] = cur_state["taxis"][taxi]["max_fuel"]
         #print(cur_state)
         # print()
-        if cur_state["taxis"] == {
-            'passengers': {'Daniel': {'destination': (0, 2), 'location': (0, 2), 'picked up': True},
-                           'Freyja': {'destination': (2, 4), 'location': (2, 4), 'picked up': True},
-                           'Iris': {'destination': (2, 1), 'location': (2, 1), 'picked up': True},
-                           'Tamar': {'destination': (3, 1), 'location': (3, 1), 'picked up': True}},
-            "taxis": {'taxi 1': {'capacity': 2, 'fuel': 4, 'location': (2, 1), 'max_fuel': 5, 'on_board': []},
-                     'taxi 2': {'capacity': 2, 'fuel': 5, 'location': (0, 2), 'max_fuel': 6, 'on_board': []},
-                     'taxi 3': {'capacity': 2, 'fuel': 5, 'location': (3, 3), 'max_fuel': 6, 'on_board': []},
-                     'taxi 4': {'capacity': 2, 'fuel': 5, 'location': (2, 0), 'max_fuel': 6, 'on_board': []}}}:
-            print("AAA")
-            #exit()
         return dict_to_tuples(cur_state)
 
     def goal_test(self, state):
@@ -370,15 +362,30 @@ class TaxiProblem(search.Problem):
         """ This is the heuristic. It gets a node (not a state,
         state can be accessed via node.state)
         and returns a goal distance estimate"""
-        hues = [self.h_1(node), self.h_2(node), self.h_3(node)]
-        return sum(hues)
+        hues = [self.h_1(node), self.h_2(node), self.h_3(node), self.h_4(node)]
+        return max(hues)
+
+    def h_4(self, node):
+        state = tuple_to_dict(node.state)
+        unpicked = [state["passengers"][passenger]["location"] for passenger in state["passengers"]
+                    if not state["passengers"][passenger]["picked up"]]
+
+        res = 0
+        for loc in unpicked:
+            r = math.inf
+            for taxi in state["taxis"]:
+                taxi_loc = state["taxis"][taxi]["location"]
+                d = man_dist(taxi_loc, loc)
+                r = min([d, r])
+            res += (r + 2)
+        return res
 
     def h_3(self, node):
         state = tuple_to_dict(node.state)
-        res = 0
+        res1 = 0
         for pasg in state["passengers"]:
-            res += man_dist(state["passengers"][pasg]["location"], state["passengers"][pasg]["destination"])
-        return res
+            res1 += man_dist(state["passengers"][pasg]["location"], state["passengers"][pasg]["destination"])
+        return res1
 
     def h_1(self, node):
         """
