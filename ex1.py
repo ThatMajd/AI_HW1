@@ -81,11 +81,11 @@ def can_move(state, action, matrix):
     if matrix[move_to[0]][move_to[1]] == IMPASSABLE:
         return False
 
-    for t in state["taxis"]:
-        # Checking that there are no other taxis in the tile to be moved to
-        if t != taxi:
-            if state["taxis"][t]["location"] == move_to:
-                return False
+    # for t in state["taxis"]:
+    #     # Checking that there are no other taxis in the tile to be moved to
+    #     if t != taxi:
+    #         if state["taxis"][t]["location"] == move_to:
+    #             return False
     return True
 
 
@@ -126,6 +126,14 @@ def can_dropoff(state, action):
         return False
     return True
 
+def can_crash(action):
+    seen = set()
+    for act in action:
+        if act[1] not in seen:
+            seen.add(act[1])
+        else:
+            return True
+    return False
 
 def can_refuel(state, action):
     taxi = action[1]
@@ -177,6 +185,8 @@ class TaxiProblem(search.Problem):
     """This class implements a medical problem according to problem description file"""
     matrix = 0
     is_solvable = True
+    num_picked = 0
+    D = {}
 
     def __init__(self, initial):
         """Don't forget to implement the goal test
@@ -190,11 +200,14 @@ class TaxiProblem(search.Problem):
             initial["taxis"][taxi]["max_fuel"] = initial["taxis"][taxi]["fuel"]
         for passenger in initial["passengers"]:
             initial["passengers"][passenger]["picked up"] = False
+            # calculating D(i) for h_2 function since it's constant
+            self.D[passenger] = man_dist(initial["passengers"][passenger]["location"],
+                                          initial["passengers"][passenger]["destination"])
 
         self.matrix = initial["map"]
         del initial["map"]
         if not solvable(initial, self.matrix):
-            self.is_solvable = True
+            self.is_solvable = False
             print("Problem unsolvable")
 
         self.state = dict_to_tuples(initial)
@@ -204,72 +217,141 @@ class TaxiProblem(search.Problem):
         """Returns all the actions that can be executed in the given
         state. The result should be a tuple (or other iterable) of actions
         as defined in the problem description file"""
+        # if not self.is_solvable:
+        #     return [(-2, -2, None)]
+        # cur_state = tuple_to_dict(state)
+        # taxis = cur_state["taxis"]
+        # passengers = cur_state["passengers"]
+        #
+        # # TODO a valid action consists of a move for each taxi
+        # # so if we have 3 taxis the output of this function should be of the form
+        # # [(move_for_taxi_1), (move_for_taxi_2), (move_for_taxi_2)]
+        # things = {}
+        # for taxi in taxis:
+        #     things[taxi] = []
+        #     loc = cur_state["taxis"][taxi]["location"]
+        #     for pos in local_area(cur_state, taxi, self.matrix):
+        #         if can_move(cur_state, ("move", taxi, pos), self.matrix):
+        #             things[taxi].append((("move", taxi, pos), pos))
+        #     for passenger in passengers:
+        #         if can_pickup(cur_state, ("pick up", taxi, passenger)):
+        #             things[taxi].append((("pick up", taxi, passenger), loc))
+        #
+        #         if can_dropoff(cur_state, ("drop off", taxi, passenger)):
+        #             things[taxi].append((("drop off", taxi, passenger), loc))
+        #
+        #     if can_refuel(cur_state, ("refuel", taxi)):
+        #         things[taxi].append((("refuel", taxi), loc))
+        #     things[taxi].append((("wait", taxi), loc))
+        # actions = list(itertools.product(*things.values()))
+        # for action in actions:
+        #     seen = set()
+        #     for taxi_act in action[0]:
+        #         if taxi_act[1] not in seen:
+        #             seen.add(taxi_act[1])
+        #         else:
+        #             break
+        #         yield tuple(t[0] for t in action)
+        # if not self.is_solvable:
+        #     return [(-2, -2, None)]
         if not self.is_solvable:
             return [(-2, -2, None)]
-        state = tuple_to_dict(state)
-        taxis = state["taxis"]
-        passengers = state["passengers"]
 
-        # TODO a valid action consists of a move for each taxi
-        # so if we have 3 taxis the output of this function should be of the form
-        # [(move_for_taxi_1), (move_for_taxi_2), (move_for_taxi_2)]
-        things = {}
+        matrix = self.matrix
+        cur_state = tuple_to_dict(state)
+        passengers = cur_state["passengers"]
+        taxis = cur_state["taxis"]
+        rows = len(matrix)
+        cols = len(matrix[0])
+
+        actions = {}
         for taxi in taxis:
-            things[taxi] = []
-            loc = state["taxis"][taxi]["location"]
-            for pos in local_area(state, taxi, self.matrix):
-                if can_move(state, ("move", taxi, pos), self.matrix):
-                    things[taxi].append((("move", taxi, pos), pos))
+            # MOVING
+            actions[taxi] = []
+            fuel = cur_state["taxis"][taxi]["fuel"]
+            x, y = cur_state["taxis"][taxi]["location"] # taxi location
+            pasgs_in_taxi = cur_state["taxis"][taxi]["on_board"]
 
-            for passenger in passengers:
-                if can_pickup(state, ("pick up", taxi, passenger)):
-                    things[taxi].append((("pick up", taxi, passenger), loc))
+            for passenger in pasgs_in_taxi:
+                if cur_state["passengers"][passenger]["destination"] == (x, y):
+                    actions[taxi].append((("drop off", taxi, passenger), (x, y)))
 
-                if can_dropoff(state, ("drop off", taxi, passenger)):
-                    things[taxi].append((("drop off", taxi, passenger), loc))
+            for passenger in [a for a in passengers if a not in pasgs_in_taxi]:
+                # PICKING UP
+                pasg_loc = cur_state["passengers"][passenger]["location"]
+                if (x, y) == pasg_loc and not cur_state["passengers"][passenger]["picked up"] \
+                        and len(pasgs_in_taxi) < cur_state["taxis"][taxi]["capacity"]:
+                    actions[taxi].append((("pick up", taxi, passenger), (x, y)))
 
-            if can_refuel(state, ("refuel", taxi)):
-                things[taxi].append((("refuel", taxi), loc))
-            things[taxi].append((("wait", taxi), loc))
-        actions = list(itertools.product(*things.values()))
+                # DROPPING OFF
+                # if passenger in cur_state["taxis"][taxi]["on_board"] and \
+                #         cur_state["passengers"][passenger]["destination"] == (x, y):
+                #     actions[taxi].append((("drop off", taxi, passenger), (x, y)))
 
-        for action in actions:
-            seen = set()
-            for taxi_act in action[0]:
-                if taxi_act[1] not in seen:
-                    seen.add(taxi_act[1])
-                else:
-                    break
-                yield tuple(t[0] for t in action)
+            if 0 <= x+1 < rows and 0 <= y < cols and matrix[x+1][y] != IMPASSABLE and fuel > 0:
+                actions[taxi].append((("move", taxi, (x+1, y)), (x+1, y)))
+            if 0 <= x-1 < rows and 0 <= y < cols and matrix[x-1][y] != IMPASSABLE and fuel > 0:
+                actions[taxi].append((("move", taxi, (x-1, y)), (x-1, y)))
+            if 0 <= x < rows and 0 <= y+1 < cols and matrix[x][y+1] != IMPASSABLE and fuel > 0:
+                actions[taxi].append((("move", taxi, (x, y+1)), (x, y+1)))
+            if 0 <= x < rows and 0 <= y-1 < cols and matrix[x][y-1] != IMPASSABLE and fuel > 0:
+                actions[taxi].append((("move", taxi, (x, y-1)), (x, y-1)))
+
+            if matrix[x][y] == 'G':
+                actions[taxi].append((("refuel", taxi), (x, y)))
+
+            actions[taxi].append((("wait", taxi), (x, y)))
+
+        # tups = list(itertools.product(*actions.values()))
+        for action in itertools.product(*actions.values()):
+
+            if not can_crash(action):
+                yield tuple(a[0] for a in action)
 
     def result(self, state, action):
         """Return the state that results from executing the given
         action in the given state. The action must be one of
         self.actions(state)."""
-        state = tuple_to_dict(state)
+        cur_state = tuple_to_dict(state)
+        # print(cur_state)
+        # print(action)
         for c in action:
             act = c[0]
             taxi = c[1]
+
             if act == "move":
                 # update taxis and passengers on the taxi's location
-                state["taxis"][taxi]["location"] = c[2]
-                state["taxis"][taxi]["fuel"] -= 1
-                update_location(state, c[2], state["taxis"][taxi]["on_board"])
+                cur_state["taxis"][taxi]["location"] = c[2]
+                cur_state["taxis"][taxi]["fuel"] -= 1
+                update_location(cur_state, c[2], cur_state["taxis"][taxi]["on_board"])
             elif act == "pick up":
                 passenger = c[2]
-                state["taxis"][taxi]["on_board"].append(passenger)
-                state["passengers"][passenger]["picked up"] = True
+                cur_state["taxis"][taxi]["on_board"].append(passenger)
+                cur_state["passengers"][passenger]["picked up"] = True
+                self.num_picked += 1
             elif act == "drop off":
                 passenger = c[2]
                 # TODO check later
-                state["passengers"][passenger]["location"] = state["passengers"][passenger]["destination"]
-                state["taxis"][taxi]["on_board"].remove(passenger)
+                cur_state["passengers"][passenger]["location"] = cur_state["passengers"][passenger]["destination"]
+                cur_state["taxis"][taxi]["on_board"].remove(passenger)
+                self.num_picked += 5
                 # Keep the picked up attribute True so that other taxis don't pick them up
             elif act == "refuel":
-                state["taxis"][taxi]["fuel"] = state["taxis"][taxi]["max_fuel"]
-
-        self.state = dict_to_tuples(state)
-        return self.state
+                cur_state["taxis"][taxi]["fuel"] = cur_state["taxis"][taxi]["max_fuel"]
+        #print(cur_state)
+        # print()
+        if cur_state["taxis"] == {
+            'passengers': {'Daniel': {'destination': (0, 2), 'location': (0, 2), 'picked up': True},
+                           'Freyja': {'destination': (2, 4), 'location': (2, 4), 'picked up': True},
+                           'Iris': {'destination': (2, 1), 'location': (2, 1), 'picked up': True},
+                           'Tamar': {'destination': (3, 1), 'location': (3, 1), 'picked up': True}},
+            "taxis": {'taxi 1': {'capacity': 2, 'fuel': 4, 'location': (2, 1), 'max_fuel': 5, 'on_board': []},
+                     'taxi 2': {'capacity': 2, 'fuel': 5, 'location': (0, 2), 'max_fuel': 6, 'on_board': []},
+                     'taxi 3': {'capacity': 2, 'fuel': 5, 'location': (3, 3), 'max_fuel': 6, 'on_board': []},
+                     'taxi 4': {'capacity': 2, 'fuel': 5, 'location': (2, 0), 'max_fuel': 6, 'on_board': []}}}:
+            print("AAA")
+            #exit()
+        return dict_to_tuples(cur_state)
 
     def goal_test(self, state):
         """ Given a state, checks if this is the goal state.
@@ -288,7 +370,15 @@ class TaxiProblem(search.Problem):
         """ This is the heuristic. It gets a node (not a state,
         state can be accessed via node.state)
         and returns a goal distance estimate"""
-        return self.h_1(node) + self.h_2(node)
+        hues = [self.h_1(node), self.h_2(node), self.h_3(node)]
+        return sum(hues)
+
+    def h_3(self, node):
+        state = tuple_to_dict(node.state)
+        res = 0
+        for pasg in state["passengers"]:
+            res += man_dist(state["passengers"][pasg]["location"], state["passengers"][pasg]["destination"])
+        return res
 
     def h_1(self, node):
         """
@@ -316,10 +406,10 @@ class TaxiProblem(search.Problem):
         d, t = 0, 0
         for passenger in state["passengers"]:
             if not state["passengers"][passenger]["picked up"]:
-                d += man_dist(state["passengers"][passenger]["location"], state["passengers"][passenger]["destination"])
+                d += self.D[passenger]
             else:
                 t += man_dist(state["passengers"][passenger]["location"], state["passengers"][passenger]["destination"])
-        return (d + t) / len(state["taxis"])
+        return (d + t) / sum([state["taxis"][taxi]["capacity"] for taxi in state["taxis"]])
 
     """Feel free to add your own functions
     (-2, -2, None) means there was a timeout"""
